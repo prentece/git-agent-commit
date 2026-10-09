@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+set -e
+
+if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  echo "Error: Not a git repository." >&2
+  exit 1
+fi
+
+if git diff --cached --quiet; then
+  echo "Error: No staged changes found (run 'git add' first)." >&2
+  exit 1
+fi
+
+user_hint="$*"
+current_branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+
+file_statuses=$(git diff --cached --name-status)
+stat_summary=$(git diff --cached --stat)
+
+exclude_patterns=(
+  ":(exclude)*lock*"
+  ":(exclude)*.lock"
+  ":(exclude)*.min.*"
+  ":(exclude)*.map"
+  ":(exclude)*.svg"
+  ":(exclude)*.png"
+  ":(exclude)*.jpg"
+  ":(exclude)*.jpeg"
+  ":(exclude)*.ico"
+  ":(exclude)dist/*"
+  ":(exclude)build/*"
+  ":(exclude).next/*"
+  ":(exclude)coverage/*"
+)
+
+clean_diff=$(git diff --cached -U1 --no-color --ignore-all-space "${exclude_patterns[@]}" | awk '
+  /^diff --git/ { lines=0; next_file=1 }
+  next_file { if (lines < 40) { print; lines++ } }
+' | head -n 300)
+
+context_data="File Statuses:
+$file_statuses
+
+Summary:
+$stat_summary"
+
+if [ -n "$clean_diff" ]; then
+  context_data="$context_data
+
+Sample Diff (compact):
+$clean_diff"
+fi
+
+prompt_text="You are an expert developer. Generate ONLY a single concise Conventional Commit message in English for these changes.
+
+Strict Conventional Commits format:
+<type>(<scope>): <description>
+
+Rules:
+1. <type> must be one of:
+   - feat: A new feature
+   - fix: A bug fix
+   - docs: Documentation only changes
+   - style: Changes that do not affect code logic (formatting, etc)
+   - refactor: A code change that neither fixes a bug nor adds a feature
+   - perf: A code change that improves performance
+   - test: Adding missing tests or correcting existing tests
+   - build: Changes affecting build system or dependencies
+   - ci: Changes to CI configuration files and scripts
+   - chore: Maintenance, tooling, or repository tasks
+   - revert: Reverts a previous commit
+2. <scope> is MANDATORY. Use a concise noun in parentheses identifying the affected area (e.g. cli, zsh, core, plugin, agent).
+3. <description> must be:
+   - In imperative mood, present tense (e.g. 'add', 'update', 'fix', NOT 'added' or 'fixes')
+   - Entirely lowercase
+   - Concise (under 72 characters)
+   - No trailing period (.)
+4. Output ONLY the single raw commit message line. Do NOT output markdown code blocks, backticks, quotes, or any explanations."
+
+if [ -n "$current_branch" ] && [ "$current_branch" != "HEAD" ]; then
+  prompt_text="$prompt_text\nCurrent Git Branch: $current_branch"
+fi
+
+if [ -n "$user_hint" ]; then
+  prompt_text="$prompt_text\nUser additional context/instruction: $user_hint"
+fi
+
+prompt_text="$prompt_text\n\n$context_data"
+
+printf "%b\n" "$prompt_text"

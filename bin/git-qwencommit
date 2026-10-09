@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -e
+
+if ! command -v qwen >/dev/null 2>&1; then
+  echo "Error: 'qwen' CLI was not found in PATH." >&2
+  exit 1
+fi
+
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+prompt=$("$DIR/git-agent-commit-core" "$@")
+
+>&2 echo "🤖 Generating commit with [qwen]..."
+raw_output=$(qwen --bare --output-style "Concise" "$prompt")
+
+echo "$raw_output" | tr -d '"`' | grep -v '^[[:space:]]*$' | head -n 1 | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'

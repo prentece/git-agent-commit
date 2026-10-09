@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -e
+
+if ! command -v claude >/dev/null 2>&1; then
+  echo "Error: 'claude' CLI was not found in PATH." >&2
+  exit 1
+fi
+
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+prompt=$("$DIR/git-agent-commit-core" "$@")
+
+>&2 echo "🤖 Generating commit with [claude]..."
+raw_output=$(claude -p "$prompt")
+
+echo "$raw_output" | tr -d '"`' | grep -v '^[[:space:]]*$' | head -n 1 | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'

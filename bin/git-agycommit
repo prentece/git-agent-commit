@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -e
+
+if ! command -v agy >/dev/null 2>&1; then
+  echo "Error: 'agy' CLI was not found in PATH." >&2
+  exit 1
+fi
+
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+prompt=$("$DIR/git-agent-commit-core" "$@")
+
+>&2 echo "🤖 Generating commit with [agy]..."
+raw_output=$(agy --print-timeout 15s --effort low --disable-slash-commands -p "$prompt" 2>/dev/null) || {
+  >&2 echo "⚠️ [agy] timed out or unavailable. Trying fallback with [gemini-3.8-flash-low]..."
+  raw_output=$(agy --model "gemini-3.8-flash-low" --print-timeout 15s --effort low --disable-slash-commands -p "$prompt") || {
+    >&2 echo "Error: failed to query agy (check connectivity or model capacity)." >&2
+    exit 1
+  }
+}
+
+echo "$raw_output" | tr -d '"`' | grep -v '^[[:space:]]*$' | head -n 1 | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
